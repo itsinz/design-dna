@@ -1,15 +1,91 @@
 require('dotenv').config();
 const express = require('express');
-const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
+const mongoose = require('mongoose');
+const session = require('express-session');
+const passport = require('./config/passport');
+const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
+const MongoStore = require('connect-mongo');
+const authRoutes = require('./routes/auth');
+const apiRoutes = require('./routes/api');
+const { isAuthenticated, verifyToken, refreshFigmaToken } = require('./middleware/auth');
+const axios = require('axios');
 
 const app = express();
-const port = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3001;
 
-app.use(cors());
-app.use(express.static('public'));
+// Security middleware
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: [
+                "'self'",
+                "'unsafe-inline'",
+                "'unsafe-eval'",
+                "https://cdn.jsdelivr.net",
+                "https://www.figma.com"
+            ],
+            styleSrc: ["'self'", "'unsafe-inline'", "https:", "http:"],
+            imgSrc: ["'self'", "https:", "http:", "data:", "blob:"],
+            connectSrc: ["'self'", "https://api.figma.com", "http://localhost:3001"],
+            frameSrc: ["'self'", "https://www.figma.com"],
+            fontSrc: ["'self'", "https:", "http:", "data:"],
+            objectSrc: ["'none'"],
+            mediaSrc: ["'self'"],
+            formAction: ["'self'"],
+            scriptSrcAttr: ["'unsafe-inline'"],
+            scriptSrcElem: [
+                "'self'",
+                "'unsafe-inline'",
+                "https://cdn.jsdelivr.net",
+                "https://www.figma.com"
+            ]
+        }
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false
+}));
+
+// Add cookie parser
+app.use(cookieParser());
+
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({
+        mongoUrl: process.env.MONGODB_URI,
+        ttl: 24 * 60 * 60 // 1 day
+    }),
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
+    }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('MongoDB connection error:', err));
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// Auth routes
+app.use('/auth', authRoutes);
+
+// API routes
+app.use('/api', apiRoutes);
 
 // Figma API configuration
 const FIGMA_API_BASE_URL = 'https://api.figma.com/v1';
@@ -347,60 +423,46 @@ const analyzeDesignPersonality = (stats, colors, typography) => {
     };
 };
 
-// API Routes
-app.get('/api/analyze', async (req, res) => {
+// Protected API endpoints
+app.get('/api/analyze', verifyToken, refreshFigmaToken, async (req, res) => {
     try {
-        const figmaUrl = req.query.url;
-        if (!figmaUrl) {
-            return res.status(400).json({ error: 'Please provide a Figma file URL' });
+        const fileKey = extractFileKey(req.query.url);
+        if (!fileKey) {
+            return res.status(400).json({ error: 'Invalid Figma file URL' });
         }
 
-        const fileKey = extractFileKey(figmaUrl);
-        console.log(`Analyzing file with key: ${fileKey}`);
-        
-        const response = await figmaApi.get(`/files/${fileKey}`);
+        // Add file to user's recent files
+        await req.user.addRecentFile(fileKey, req.query.url);
+
+        // Fetch file data using user's access token
+        const response = await axios.get(`https://api.figma.com/v1/files/${fileKey}`, {
+            headers: {
+                'Authorization': `Bearer ${req.user.accessToken}`
+            }
+        });
+
         const fileData = response.data;
-        
-        // Comprehensive analysis
-        const analytics = analyzeLayerComplexity(fileData.document);
+        const stats = analyzeLayerComplexity(fileData.document);
         const colors = analyzeColors(fileData.document);
         const typography = analyzeTypography(fileData.document);
         
-        // Analyze design personality
-        const personality = analyzeDesignPersonality(analytics, colors, typography);
-        
-        // Sort complex frames by child count
-        analytics.complexFrames.sort((a, b) => b.childCount - a.childCount);
-        
-        // Get most used components
-        const sortedComponents = Object.entries(analytics.components)
-            .sort(([,a], [,b]) => b - a)
-            .reduce((acc, [key, value]) => ({...acc, [key]: value}), {});
-            
+        const personality = analyzeDesignPersonality(stats, colors, typography);
+
         res.json({
-            totalLayers: analytics.total,
-            maxDepth: analytics.maxDepth,
-            layerTypes: analytics.layerTypes,
-            mostComplexFrames: analytics.complexFrames.slice(0, 5),
-            componentUsage: sortedComponents,
-            colors: colors,
-            typography: typography,
-            personality: personality
+            stats,
+            colors,
+            typography,
+            personality
         });
     } catch (error) {
-        console.error('Error details:', {
-            message: error.message,
-            response: error.response ? {
-                status: error.response.status,
-                statusText: error.response.statusText,
-                data: error.response.data
-            } : 'No response data'
-        });
-        res.status(error.response?.status || 500).json({ 
-            error: error.message,
-            details: error.response?.data
-        });
+        console.error('Error analyzing file:', error);
+        res.status(500).json({ error: 'Failed to analyze file' });
     }
+});
+
+// Get user's recent files
+app.get('/api/recent-files', verifyToken, (req, res) => {
+    res.json({ recentFiles: req.user.recentFiles });
 });
 
 // Serve the main page
@@ -408,9 +470,11 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
     console.log('Available endpoints:');
     console.log('- GET /: View analytics dashboard');
-    console.log('- GET /api/analyze: Get raw analysis data');
+    console.log('- GET /auth/figma: Login with Figma');
+    console.log('- GET /api/analyze: Get file analysis (protected)');
+    console.log('- GET /api/recent-files: Get recent files (protected)');
 });

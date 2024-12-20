@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Design DNA - Figma Analytics</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/css/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -206,26 +206,163 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .auth-container {
+            text-align: center;
+            margin: 40px auto;
+            max-width: 600px;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .login-button {
+            background: #000000;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1.1em;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+        .login-button:hover {
+            background: #333333;
+        }
+        .login-button img {
+            width: 24px;
+            height: 24px;
+        }
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+        .recent-files {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .recent-file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .recent-file-item:hover {
+            background: #f8fafc;
+        }
+        .recent-file-item:last-child {
+            border-bottom: none;
+        }
+        .error-message {
+            background: #f8fafc;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            font-size: 15px;
+            color: #ef4444;
+        }
+        .recent-files-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .clear-history {
+            background: #ef4444;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .clear-history:hover {
+            background: #dc2626;
+        }
+        .nav-menu {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .nav-link {
+            text-decoration: none;
+            color: #6366f1;
+            font-size: 1.1em;
+            transition: color 0.2s;
+        }
+        .nav-link:hover {
+            color: #4f46e5;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Design DNA</h1>
-            <p>Uncover the unique personality of your Figma designs</p>
+    <div class="header">
+        <h1>Design DNA</h1>
+        <p>Discover your unique design personality!</p>
+    </div>
+
+    <div class="auth-container" id="authContainer">
+        <button class="login-button" onclick="loginWithFigma()">
+            <img src="https://www.figma.com/static/icon_white.png" alt="Figma logo">
+            Log in with Figma
+        </button>
+    </div>
+
+    <div class="container" id="mainContainer" style="display: none;">
+        <div class="user-profile" id="userProfile">
+            <img class="user-avatar" id="userAvatar" src="" alt="User avatar">
+            <div>
+                <strong id="userName"></strong>
+                <button onclick="logout()" class="share-button" style="background: #ef4444;">Logout</button>
+            </div>
         </div>
-        
+
         <div class="input-container">
-            <input type="text" id="figmaUrl" placeholder="Paste your Figma file URL here">
+            <input type="text" id="figma-url" placeholder="Paste your Figma file URL here">
             <button onclick="analyzeFile()">Analyze Design</button>
         </div>
 
-        <div class="loading" id="loadingIndicator">
-            <div class="loading-spinner"></div>
-            <p>Analyzing your design DNA...</p>
+        <div id="error-container" class="error-container"></div>
+        <div id="loading-indicator" class="loading-indicator">Analyzing your design...</div>
+        <div id="analysis-results" class="analysis-results"></div>
+
+        <div class="recent-files" id="recent-files">
+            <div class="recent-files-header">
+                <h2>Recent Files</h2>
+                <button class="clear-history" onclick="clearRecentFiles()">Clear History</button>
+            </div>
+            <div id="recentFilesList"></div>
         </div>
 
-        <div class="personality-container" id="personalityContainer" style="display: none;">
+        <div id="loadingContainer" class="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Analyzing your design...</p>
+        </div>
+
+        <div id="errorContainer" style="display: none;" class="error-message">
+        </div>
+
+        <div id="personalityContainer" style="display: none;">
             <div class="archetype-emoji" id="archetypeEmoji"></div>
             <h1 class="archetype-title" id="archetypeTitle"></h1>
             <p class="archetype-description" id="archetypeDescription"></p>
@@ -284,220 +421,13 @@
             <h3>Typography Styles</h3>
             <canvas id="typographyChart"></canvas>
         </div>
+
+        <nav class="nav-menu">
+            <a href="/auth/logout" class="nav-link">Sign Out</a>
+        </nav>
     </div>
 
-    <script>
-        let charts = {};
-
-        async function analyzeFile() {
-            const figmaUrl = document.getElementById('figmaUrl').value;
-            if (!figmaUrl) {
-                alert('Please enter a Figma file URL');
-                return;
-            }
-
-            // Show loading indicator
-            document.getElementById('loadingIndicator').style.display = 'block';
-            document.getElementById('personalityContainer').style.display = 'none';
-
-            try {
-                const response = await fetch(`/api/analyze?url=${encodeURIComponent(figmaUrl)}`);
-                const data = await response.json();
-
-                if (data.error) {
-                    alert(`Error: ${data.error}`);
-                    return;
-                }
-
-                updateStats(data);
-                updatePersonality(data.personality);
-                updateCharts(data);
-                
-                // Hide loading indicator and show results
-                document.getElementById('loadingIndicator').style.display = 'none';
-                document.getElementById('personalityContainer').style.display = 'block';
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error analyzing file. Please check the console for details.');
-            } finally {
-                document.getElementById('loadingIndicator').style.display = 'none';
-            }
-        }
-
-        function updateStats(data) {
-            document.getElementById('totalLayers').textContent = data.totalLayers.toLocaleString();
-            document.getElementById('maxDepth').textContent = data.maxDepth;
-            const mostComplex = data.mostComplexFrames[0];
-            document.getElementById('complexFrame').textContent = 
-                `${mostComplex.name} (${mostComplex.childCount} children)`;
-        }
-
-        function updatePersonality(data) {
-            document.getElementById('archetypeEmoji').textContent = data.archetypeInfo.emoji;
-            document.getElementById('archetypeTitle').textContent = data.primaryArchetype;
-            document.getElementById('archetypeDescription').textContent = data.archetypeInfo.description;
-            
-            // Update strengths
-            const strengthsList = document.getElementById('strengthsList');
-            strengthsList.innerHTML = data.strengths
-                .map(strength => `<span class="strength-tag">${strength}</span>`)
-                .join('');
-            
-            // Update compatibility
-            const compatibilityInfo = document.getElementById('compatibilityInfo');
-            compatibilityInfo.innerHTML = `
-                <p>You're most compatible with <strong>${data.compatibility.archetype}</strong></p>
-                <p>${data.compatibility.reason}</p>
-            `;
-            
-            // Update fun facts
-            const funFactsContainer = document.getElementById('funFacts');
-            funFactsContainer.innerHTML = data.funFacts
-                .map(fact => `<div class="fun-fact">💡 ${fact}</div>`)
-                .join('');
-        }
-
-        function updateCharts(data) {
-            updateLayerTypesChart(data.layerTypes);
-            updateComponentUsageChart(data.componentUsage);
-            updateColorPalette(data.colors);
-            updateTypographyChart(data.typography);
-        }
-
-        function updateLayerTypesChart(layerTypes) {
-            const ctx = document.getElementById('layerTypesChart').getContext('2d');
-            
-            if (charts.layerTypes) {
-                charts.layerTypes.destroy();
-            }
-
-            charts.layerTypes = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(layerTypes),
-                    datasets: [{
-                        data: Object.values(layerTypes),
-                        backgroundColor: generateColors(Object.keys(layerTypes).length)
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'right'
-                        }
-                    }
-                }
-            });
-        }
-
-        function updateComponentUsageChart(componentUsage) {
-            const ctx = document.getElementById('componentUsageChart').getContext('2d');
-            
-            if (charts.components) {
-                charts.components.destroy();
-            }
-
-            const labels = Object.keys(componentUsage).slice(0, 10);
-            const data = labels.map(label => componentUsage[label]);
-
-            charts.components = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Usage Count',
-                        data: data,
-                        backgroundColor: '#6366f1'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-
-        function updateColorPalette(colors) {
-            const container = document.getElementById('colorPalette');
-            container.innerHTML = '';
-            
-            colors.forEach(color => {
-                const swatch = document.createElement('div');
-                swatch.className = 'color-swatch';
-                swatch.style.backgroundColor = color;
-                swatch.title = color;
-                container.appendChild(swatch);
-            });
-        }
-
-        function updateTypographyChart(typography) {
-            const ctx = document.getElementById('typographyChart').getContext('2d');
-            
-            if (charts.typography) {
-                charts.typography.destroy();
-            }
-
-            const labels = Object.keys(typography);
-            const data = labels.map(label => typography[label]);
-
-            charts.typography = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Usage Count',
-                        data: data,
-                        backgroundColor: '#6366f1'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: {
-                            ticks: {
-                                maxRotation: 45,
-                                minRotation: 45
-                            }
-                        },
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-
-        function generateColors(count) {
-            const colors = [];
-            for (let i = 0; i < count; i++) {
-                const hue = (i * 360) / count;
-                colors.push(`hsla(${hue}, 70%, 60%, 0.8)`);
-            }
-            return colors;
-        }
-
-        function shareResults() {
-            const archetype = document.getElementById('archetypeTitle').textContent;
-            const text = `I just discovered my Design DNA! I'm "${archetype}" 🎨\nFind out your design archetype at: ${window.location.href}`;
-            
-            if (navigator.share) {
-                navigator.share({
-                    title: 'My Design DNA',
-                    text: text,
-                    url: window.location.href
-                });
-            } else {
-                // Fallback to copying to clipboard
-                navigator.clipboard.writeText(text)
-                    .then(() => alert('Share text copied to clipboard!'))
-                    .catch(err => console.error('Failed to copy:', err));
-            }
-        }
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/js/main.js"></script>
 </body>
 </html>
